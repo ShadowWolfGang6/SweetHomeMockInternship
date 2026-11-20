@@ -2004,11 +2004,55 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
   }
   
   /**
-   * Prints this component plan at the scale given in the home print attributes or at a scale 
-   * that makes it fill <code>pageFormat</code> imageable size if this attribute is <code>null</code>.
+   * Prints one page for each viewable level of this plan, in the home's level order, at the
+   * scale given in the home print attributes or at a scale that makes each level fill
+   * <code>pageFormat</code> imageable size if this attribute is <code>null</code>.
+   * The level selected before printing is restored once <code>pageIndex</code> is handled,
+   * even if the page couldn't be rendered.
    */
   public int print(Graphics g, PageFormat pageFormat, int pageIndex) {
-    List<Selectable> printedItems = getPaintedItems(); 
+    List<Level> levels = this.home.getLevels();
+    if (levels.isEmpty()) {
+      return printSelectedLevel(g, pageFormat, pageIndex);
+    }
+    Level selectedLevel = this.home.getSelectedLevel();
+    try {
+      int remainingPages = pageIndex;
+      for (Level level : levels) {
+        if (level.isViewable()) {
+          this.home.setSelectedLevel(level);
+          int levelPageCount = countSelectedLevelPages(pageFormat);
+          if (remainingPages < levelPageCount) {
+            return printSelectedLevel(g, pageFormat, remainingPages);
+          }
+          remainingPages -= levelPageCount;
+        }
+      }
+      return NO_SUCH_PAGE;
+    } finally {
+      this.home.setSelectedLevel(selectedLevel);
+    }
+  }
+
+  /**
+   * Returns the number of pages needed to print the plan at the currently selected level.
+   */
+  private int countSelectedLevelPages(PageFormat pageFormat) {
+    BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+    Graphics dummyGraphics = dummyImage.getGraphics();
+    int pageCount = 0;
+    while (printSelectedLevel(dummyGraphics, pageFormat, pageCount) == PAGE_EXISTS) {
+      pageCount++;
+    }
+    dummyGraphics.dispose();
+    return pageCount;
+  }
+
+  /**
+   * Prints the plan at the currently selected level.
+   */
+  private int printSelectedLevel(Graphics g, PageFormat pageFormat, int pageIndex) {
+    List<Selectable> printedItems = getPaintedItems();
     Rectangle2D printedItemBounds = getItemsBounds(g, printedItems);
     if (printedItemBounds != null) {
       double imageableX = pageFormat.getImageableX();
